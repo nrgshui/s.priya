@@ -1,0 +1,67 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    font-family: 'Inter', sans-serif;
+  }
+}
+
+/* Fabric Textures (Woven SVG patterns for Glassmorphic Cards) */
+
+/* 1. Herringbone / Chevron Weave */
+.fabric-herringbone {
+  background-image: url("data:image/svg+xml,%3Csvg width='32' height='32' viewBox='0 0 32 32' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0l8 8-8 8 8 8-8 8h4l8-8-8-8 8-8-8-8H0zm16 0l8 8-8 8 8 8-8 8h4l8-8-8-8 8-8-8-8h-4z' fill='%23ffffff' fill-opacity='0.04' fill-rule='evenodd'/%3E%3C/svg%3E");
+}
+
+/* 2. Twill / Diagonal Weave */
+.fabric-twill {
+  background-image: url("data:image/svg+xml,%3Csvg width='16' height='16' viewBox='0 0 16 16' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M-4 4l8-8M0 8l8-8M4 12l8-8M8 16l8-8M12 20l8-8' stroke='%23ffffff' stroke-width='1.5' stroke-opacity='0.05' fill='none'/%3E%3C/svg%3E");
+}
+
+/* 3. Linen / Crosshatch Weave */
+.fabric-linen {
+  background-image: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 10h20M10 0v20M0 5h20M5 0v20M0 15h20M15 0v20' stroke='%23ffffff' stroke-width='0.8' stroke-opacity='0.04' fill='none'/%3E%3C/svg%3E");
+}
+
+/* 4. Ribbed Knit / Wales Weave */
+.fabric-ribbed {
+  background-image: url("data:image/svg+xml,%3Csvg width='12' height='24' viewBox='0 0 12 24' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M2 0v24M6 0v24M10 0v24' stroke='%23ffffff' stroke-width='1.5' stroke-opacity='0.05' fill='none' stroke-dasharray='3 2'/%3E%3C/svg%3E");
+}
+
+/* 5. Honeycomb / Technical Mesh Weave */
+.fabric-mesh {
+  background-image: url("data:image/svg+xml,%3Csvg width='24' height='24' viewBox='0 0 24 24' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M12 2l10 6v12l-10 6-10-6V8l10-6z' stroke='%23ffffff' stroke-width='1' stroke-opacity='0.04' fill='none'/%3E%3C/svg%3E");
+}
+
+/* Light mode fabric pattern tints */
+.light .fabric-herringbone,
+.light .fabric-twill,
+.light .fabric-linen,
+.light .fabric-ribbed,
+.light .fabric-mesh {
+  filter: invert(1) opacity(0.5);
+}
+
+/* Custom noise pattern and grain overlay */
+.grain-overlay {
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.08'/%3E%3C/svg%3E");
+  background-size: 200px 200px;
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(150, 150, 150, 0.3);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(150, 150, 150, 0.5);
+}
