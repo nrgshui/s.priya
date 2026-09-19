@@ -259,7 +259,7 @@ const EditorialModelStudio: React.FC<Model3DSceneProps> = ({
   }, [fabricType, color]);
 
   return (
-    <group position={[0, -0.2, 0]}>
+    <group position={[0, -0.6, 0]}>
       {/* ================= EDITORIAL MODEL SILHOUETTE ================= */}
       {/* Head with sleek chignon bun matching the Pixabay reference model */}
       <mesh position={[0, 2.05, 0]} castShadow>
@@ -682,7 +682,7 @@ export const ThreeGarmentViewer: React.FC<ThreeGarmentViewerProps> = ({ theme = 
                 >
                   <Canvas
                     shadows
-                    camera={{ position: [0, 1.2, 4.2], fov: 42 }}
+                    camera={{ position: [0, 0.7, 4.6], fov: 40 }}
                     dpr={[1, 2]}
                     className="w-full h-full cursor-grab active:cursor-grabbing"
                   >
@@ -714,6 +714,7 @@ export const ThreeGarmentViewer: React.FC<ThreeGarmentViewerProps> = ({ theme = 
                     />
 
                     <OrbitControls
+                      target={[0, 0.5, 0]}
                       enableZoom={true}
                       minDistance={2.2}
                       maxDistance={6.5}
