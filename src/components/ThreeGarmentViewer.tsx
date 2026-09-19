@@ -2,7 +2,8 @@ import React, { useRef, useState, useMemo } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls, Float, ContactShadows } from "@react-three/drei";
 import * as THREE from "three";
-import { RotateCcw, Layers, Palette, Sparkles, Check, Wind, Disc } from "lucide-react";
+import { RotateCcw, Layers, Palette, Sparkles, Check, Wind, Disc, Eye } from "lucide-react";
+import { ErrorBoundary } from "./ErrorBoundary";
 
 interface DressFormSceneProps {
   color: string;
@@ -28,23 +29,39 @@ const TailorDressForm: React.FC<DressFormSceneProps> = ({
 
     if (clothMeshRef.current && clothMeshRef.current.geometry) {
       const position = clothMeshRef.current.geometry.attributes.position;
+      if (!clothMeshRef.current.userData.initialZ) {
+        const arr = new Float32Array(position.count);
+        for (let i = 0; i < position.count; i++) {
+          arr[i] = position.getZ(i);
+        }
+        clothMeshRef.current.userData.initialZ = arr;
+      }
+      const initialZ = clothMeshRef.current.userData.initialZ;
       // Animate subtle ripples across the cloth surface
       for (let i = 0; i < position.count; i++) {
         const y = position.getY(i);
         const x = position.getX(i);
         // Soft buttery undulation
         const wave = Math.sin(y * 4 + time * 2) * 0.018 * windSpeed + Math.cos(x * 5 + time * 1.5) * 0.012 * windSpeed;
-        position.setZ(i, (clothMeshRef.current.userData.initialZ?.[i] || 0) + wave);
+        position.setZ(i, initialZ[i] + wave);
       }
       position.needsUpdate = true;
     }
 
     if (clothCascadeRef.current && clothCascadeRef.current.geometry) {
       const position = clothCascadeRef.current.geometry.attributes.position;
+      if (!clothCascadeRef.current.userData.initialZ) {
+        const arr = new Float32Array(position.count);
+        for (let i = 0; i < position.count; i++) {
+          arr[i] = position.getZ(i);
+        }
+        clothCascadeRef.current.userData.initialZ = arr;
+      }
+      const initialZ = clothCascadeRef.current.userData.initialZ;
       for (let i = 0; i < position.count; i++) {
         const y = position.getY(i);
         const wave = Math.sin(y * 5 + time * 2.5) * 0.035 * windSpeed;
-        position.setZ(i, (clothCascadeRef.current.userData.initialZ?.[i] || 0) + wave);
+        position.setZ(i, initialZ[i] + wave);
       }
       position.needsUpdate = true;
     }
@@ -239,10 +256,7 @@ const TailorDressForm: React.FC<DressFormSceneProps> = ({
       <group ref={clothGroupRef}>
         {/* Main Draped Bodice (Asymmetrical couture wrap with buttery sheen) */}
         <mesh
-          ref={(m) => {
-            clothMeshRef.current = m;
-            onClothCreated(m);
-          }}
+          ref={clothMeshRef}
           position={[0, 1.15, 0.04]}
           castShadow
           receiveShadow
@@ -305,10 +319,7 @@ const TailorDressForm: React.FC<DressFormSceneProps> = ({
 
         {/* Cascading Side Train (Flowing down past the hip like buttery liquid silk) */}
         <mesh
-          ref={(m) => {
-            clothCascadeRef.current = m;
-            onClothCreated(m);
-          }}
+          ref={clothCascadeRef}
           position={[0.82, 0.12, 0.25]}
           rotation={[0.1, 0.1, -0.15]}
           castShadow
@@ -461,50 +472,73 @@ export const ThreeGarmentViewer: React.FC<ThreeGarmentViewerProps> = ({ theme = 
                 : "bg-[#111319] border-white/15 shadow-black/60"
             }`}
           >
-            <Canvas
-              shadows
-              camera={{ position: [0, 0.4, 4.4], fov: 42 }}
-              dpr={[1, 2]}
-              className="w-full h-full cursor-grab active:cursor-grabbing"
+            <ErrorBoundary
+              sectionName="3D Dress Form Atelier"
+              fallback={
+                <div className="w-full h-full flex flex-col items-center justify-center p-8 text-center">
+                  <div
+                    className="w-24 h-24 rounded-full border-4 shadow-xl mb-4 flex items-center justify-center transition-all duration-500"
+                    style={{ backgroundColor: activeColorHex, borderColor: isLight ? "#00000020" : "#ffffff30" }}
+                  >
+                    <Sparkles className="text-white drop-shadow-md" size={32} />
+                  </div>
+                  <h4 className="text-xl font-bold font-anton uppercase tracking-wide mb-1">
+                    {activeFabricObj.name}
+                  </h4>
+                  <p className="text-xs font-mono uppercase text-emerald-500 mb-3">
+                    {activeColorObj.name} • {activeColorObj.code} • {activeFabricObj.weight}
+                  </p>
+                  <p className={`text-xs max-w-sm leading-relaxed ${isLight ? "text-neutral-600" : "text-white/60"}`}>
+                    {activeFabricObj.desc}
+                  </p>
+                </div>
+              }
             >
-              {/* Studio Key & Rim Lighting */}
-              <ambientLight intensity={isLight ? 0.9 : 0.6} />
-              <directionalLight
-                castShadow
-                position={[4, 6, 5]}
-                intensity={1.6}
-                shadow-mapSize={2048}
-              />
-              <directionalLight position={[-4, 4, -3]} intensity={0.8} color="#9ec5fe" />
-              <pointLight position={[0, -1, 3]} intensity={0.4} />
-
-              <Float speed={1.1} rotationIntensity={0.15} floatIntensity={0.2}>
-                <TailorDressForm
-                  color={activeColorHex}
-                  wireframe={wireframe}
-                  fabricType={activeFabric}
-                  windSpeed={windSpeed}
+              <Canvas
+                shadows
+                camera={{ position: [0, 0.4, 4.4], fov: 42 }}
+                dpr={[1, 2]}
+                className="w-full h-full cursor-grab active:cursor-grabbing"
+              >
+                {/* Studio Key & Rim Lighting */}
+                <ambientLight intensity={isLight ? 0.9 : 0.6} />
+                <directionalLight
+                  castShadow
+                  position={[4, 6, 5]}
+                  intensity={1.6}
+                  shadow-mapSize={2048}
                 />
-              </Float>
+                <directionalLight position={[-4, 4, -3]} intensity={0.8} color="#9ec5fe" />
+                <pointLight position={[0, -1, 3]} intensity={0.4} />
 
-              <ContactShadows
-                position={[0, -2.3, 0]}
-                opacity={0.65}
-                scale={7}
-                blur={2}
-                far={5}
-              />
+                <Float speed={1.1} rotationIntensity={0.15} floatIntensity={0.2}>
+                  <TailorDressForm
+                    color={activeColorHex}
+                    wireframe={wireframe}
+                    fabricType={activeFabric}
+                    windSpeed={windSpeed}
+                  />
+                </Float>
 
-              <OrbitControls
-                enableZoom={true}
-                minDistance={2.4}
-                maxDistance={7.0}
-                maxPolarAngle={Math.PI / 1.7}
-                minPolarAngle={Math.PI / 3.8}
-                autoRotate={autoRotate}
-                autoRotateSpeed={1.0}
-              />
-            </Canvas>
+                <ContactShadows
+                  position={[0, -2.3, 0]}
+                  opacity={0.65}
+                  scale={7}
+                  blur={2}
+                  far={5}
+                />
+
+                <OrbitControls
+                  enableZoom={true}
+                  minDistance={2.4}
+                  maxDistance={7.0}
+                  maxPolarAngle={Math.PI / 1.7}
+                  minPolarAngle={Math.PI / 3.8}
+                  autoRotate={autoRotate}
+                  autoRotateSpeed={1.0}
+                />
+              </Canvas>
+            </ErrorBoundary>
 
             {/* In-Canvas Floating Toolbar */}
             <div className="absolute top-4 left-4 flex flex-wrap items-center gap-2 z-10">
