@@ -348,6 +348,12 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                 <img
                   src={item.src}
                   alt={item.name}
+                  onError={(e) => {
+                    const target = e.currentTarget;
+                    if ((item as any).fallbackSrc && target.src !== (item as any).fallbackSrc) {
+                      target.src = (item as any).fallbackSrc;
+                    }
+                  }}
                   draggable={false}
                   className="w-full h-full object-contain object-bottom select-none drop-shadow-2xl"
                   style={{

@@ -1,9 +1,18 @@
-﻿export interface ToonCharacter {
+import kabirImg from "../assets/toons/kabir.png";
+import aaravImg from "../assets/toons/aarav.png";
+import devImg from "../assets/toons/dev.png";
+import vihaanImg from "../assets/toons/vihaan.png";
+import meeraImg from "../assets/toons/meera.png";
+import arjunImg from "../assets/toons/arjun.png";
+import riyaImg from "../assets/toons/riya.png";
+
+export interface ToonCharacter {
   id: string;
   name: string;
   category: "Men" | "Children";
   role: string;
   src: string;
+  fallbackSrc?: string;
   bg: string;
   panel: string;
   badge: string;
@@ -30,7 +39,8 @@ export const INDIAN_TOON_CHARACTERS: ToonCharacter[] = [
     name: "KABIR",
     category: "Men",
     role: "Menswear Designer Toon",
-    src: "/assets/toons/kabir.png",
+    src: kabirImg,
+    fallbackSrc: "./assets/toons/kabir.jpg",
     bg: "#F4845F",
     panel: "#F79B7F",
     badge: "STYLE UNION MEN • RETRO RE-DO",
@@ -42,7 +52,8 @@ export const INDIAN_TOON_CHARACTERS: ToonCharacter[] = [
     name: "AARAV",
     category: "Men",
     role: "Menswear Knitwear Toon",
-    src: "/assets/toons/aarav.png",
+    src: aaravImg,
+    fallbackSrc: "./assets/toons/aarav.jpg",
     bg: "#6BBF7A",
     panel: "#85CC92",
     badge: "STYLE UNION MEN • NERD FLAT KNITS",
@@ -54,7 +65,8 @@ export const INDIAN_TOON_CHARACTERS: ToonCharacter[] = [
     name: "DEV",
     category: "Men",
     role: "Menswear Active Street Toon",
-    src: "/assets/toons/dev.png",
+    src: devImg,
+    fallbackSrc: "./assets/toons/dev.jpg",
     bg: "#4A90E2",
     panel: "#6EB5FF",
     badge: "STYLE UNION MEN • DIMENSION COLLECTION",
@@ -66,7 +78,8 @@ export const INDIAN_TOON_CHARACTERS: ToonCharacter[] = [
     name: "VIHAAN",
     category: "Children",
     role: "Kidswear Boys Toon (DMart)",
-    src: "/assets/toons/vihaan.png",
+    src: vihaanImg,
+    fallbackSrc: "./assets/toons/vihaan.jpg",
     bg: "#F5A623",
     panel: "#F7BA55",
     badge: "DMART KIDSWEAR • BOYS TOPWEAR",
@@ -78,7 +91,8 @@ export const INDIAN_TOON_CHARACTERS: ToonCharacter[] = [
     name: "MEERA",
     category: "Children",
     role: "Kidswear Girls Toon (DMart)",
-    src: "/assets/toons/meera.png",
+    src: meeraImg,
+    fallbackSrc: "./assets/toons/meera.jpg",
     bg: "#FF7B90",
     panel: "#FF99AA",
     badge: "DMART KIDSWEAR • GIRLS CASUALS",
@@ -90,7 +104,8 @@ export const INDIAN_TOON_CHARACTERS: ToonCharacter[] = [
     name: "ARJUN",
     category: "Children",
     role: "Kidswear Boys Toon (DMart)",
-    src: "/assets/toons/arjun.png",
+    src: arjunImg,
+    fallbackSrc: "./assets/toons/arjun.jpg",
     bg: "#20B2AA",
     panel: "#48D1CC",
     badge: "DMART KIDSWEAR • BOYS GRAPHIC FLEECE",
@@ -102,7 +117,8 @@ export const INDIAN_TOON_CHARACTERS: ToonCharacter[] = [
     name: "RIYA",
     category: "Children",
     role: "Kidswear Girls Toon (DMart)",
-    src: "/assets/toons/riya.png",
+    src: riyaImg,
+    fallbackSrc: "./assets/toons/riya.jpg",
     bg: "#B388FF",
     panel: "#C7A4FF",
     badge: "DMART KIDSWEAR • GIRLS KNIT DRESSING",
