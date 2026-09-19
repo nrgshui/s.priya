@@ -32,5 +32,24 @@
         Please enable JavaScript to experience the 3D Garment Atelier and TOONHUB showcase.
       </div>
     </noscript>
+    <script>
+      // If served directly from GitHub Pages repository root without Vite dev server:
+      (function() {
+        if (window.location.hostname.endsWith('github.io') && !document.querySelector('script[src*="/assets/index-"]')) {
+          const basePath = window.location.pathname.endsWith('/') ? window.location.pathname : window.location.pathname + '/';
+          const js = document.createElement('script');
+          js.type = 'module';
+          js.crossOrigin = 'anonymous';
+          js.src = basePath + 'assets/index-DbbsdEls.js';
+          document.head.appendChild(js);
+
+          const css = document.createElement('link');
+          css.rel = 'stylesheet';
+          css.crossOrigin = 'anonymous';
+          css.href = basePath + 'assets/index-B_RDegTl.css';
+          document.head.appendChild(css);
+        }
+      })();
+    </script>
   </body>
 </html>
