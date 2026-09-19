@@ -1,407 +1,463 @@
-import React, { useRef, useState, useMemo } from "react";
+import React, { useRef, useState, useMemo, useEffect } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls, Float, ContactShadows } from "@react-three/drei";
 import * as THREE from "three";
-import { RotateCcw, Layers, Palette, Sparkles, Check, Wind, Disc, Eye } from "lucide-react";
+import {
+  RotateCcw,
+  Layers,
+  Palette,
+  Sparkles,
+  Check,
+  Wind,
+  Disc,
+  Eye,
+  Film,
+  Box,
+  Play,
+  Pause,
+  ZoomIn,
+  Sliders,
+  Copy,
+} from "lucide-react";
 import { ErrorBoundary } from "./ErrorBoundary";
+import modelVideoSrc from "../assets/model-silk-flow.mp4";
 
-interface DressFormSceneProps {
+// ============================================================================
+// PROCEDURAL PROCEDURAL WEAVE BUMP & NORMAL MAPS (Clear Fabric Differentiation)
+// ============================================================================
+function generateFabricBumpMap(type: string): THREE.CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = 256;
+  canvas.height = 256;
+  const ctx = canvas.getContext("2d")!;
+
+  // Base neutral gray
+  ctx.fillStyle = "#808080";
+  ctx.fillRect(0, 0, 256, 256);
+
+  if (type === "cashmere-knit") {
+    // 16 Gauge 2-Ply Knitted Rib Wales & Interlocking Loops
+    ctx.fillStyle = "#a8a8a8";
+    for (let x = 0; x < 256; x += 12) {
+      ctx.fillRect(x, 0, 6, 256);
+    }
+    // Knit loops
+    ctx.strokeStyle = "#505050";
+    ctx.lineWidth = 2.0;
+    for (let y = 0; y < 256; y += 12) {
+      for (let x = 0; x < 256; x += 12) {
+        ctx.beginPath();
+        ctx.arc(x + 6, y + 6, 4, 0, Math.PI);
+        ctx.stroke();
+      }
+    }
+  } else if (type === "french-terry") {
+    // 290 GSM Cotton Looper: Diagonal Weft + Coiled Loops
+    ctx.strokeStyle = "#484848";
+    ctx.lineWidth = 3.0;
+    for (let i = -256; i < 512; i += 16) {
+      ctx.beginPath();
+      ctx.moveTo(i, 0);
+      ctx.lineTo(i + 256, 256);
+      ctx.stroke();
+    }
+    // Terry loop clusters
+    for (let i = 0; i < 400; i++) {
+      const rx = Math.random() * 256;
+      const ry = Math.random() * 256;
+      ctx.fillStyle = Math.random() > 0.5 ? "#686868" : "#989898";
+      ctx.beginPath();
+      ctx.arc(rx, ry, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else if (type === "linen-voile") {
+    // 140 GSM Crinkled Silk Linen Voile: Organic Slub Fissures & Crepe Texture
+    for (let i = 0; i < 256; i += 4) {
+      const alpha = 0.4 + Math.random() * 0.5;
+      ctx.strokeStyle = `rgba(${70 + Math.random() * 80}, ${70 + Math.random() * 80}, ${70 + Math.random() * 80}, ${alpha})`;
+      ctx.lineWidth = 1.0 + Math.random() * 2.2;
+      ctx.beginPath();
+      ctx.moveTo(0, i + (Math.random() - 0.5) * 4);
+      ctx.lineTo(256, i + (Math.random() - 0.5) * 4);
+      ctx.stroke();
+    }
+    for (let i = 0; i < 256; i += 6) {
+      ctx.strokeStyle = `rgba(140, 140, 140, 0.5)`;
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(i + (Math.random() - 0.5) * 3, 0);
+      ctx.lineTo(i + (Math.random() - 0.5) * 3, 256);
+      ctx.stroke();
+    }
+  } else if (type === "heavy-satin") {
+    // 220 GSM Heavy Liquid Satin: Smooth 4/1 Twill Float Grain
+    ctx.strokeStyle = "#909090";
+    ctx.lineWidth = 1.0;
+    for (let i = -256; i < 512; i += 8) {
+      ctx.beginPath();
+      ctx.moveTo(i, 0);
+      ctx.lineTo(i + 256, 256);
+      ctx.stroke();
+    }
+  } else {
+    // 19 Momme Silk Charmeuse: Microscopic Pristine Filament (Ultrafine)
+    const img = ctx.getImageData(0, 0, 256, 256);
+    for (let i = 0; i < img.data.length; i += 4) {
+      const n = (Math.random() - 0.5) * 4;
+      img.data[i] += n;
+      img.data[i + 1] += n;
+      img.data[i + 2] += n;
+    }
+    ctx.putImageData(img, 0, 0);
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(
+    type === "cashmere-knit" ? 14 : type === "french-terry" ? 10 : type === "linen-voile" ? 8 : 6,
+    type === "cashmere-knit" ? 14 : type === "french-terry" ? 10 : type === "linen-voile" ? 8 : 6
+  );
+  return texture;
+}
+
+// ============================================================================
+// 3D REAL-MODEL SILHOUETTE & BILLOWING SILK CAPE (Inspired by Editorial Reference)
+// ============================================================================
+interface Model3DSceneProps {
   color: string;
   wireframe: boolean;
   fabricType: string;
   windSpeed: number;
 }
 
-// Realistic Atelier Tailoring Dress Form (Mannequin) with Draped Silky Fabric
-const TailorDressForm: React.FC<DressFormSceneProps> = ({
+const EditorialModelStudio: React.FC<Model3DSceneProps> = ({
   color,
   wireframe,
   fabricType,
   windSpeed,
 }) => {
-  const clothGroupRef = useRef<THREE.Group>(null);
-  const clothMeshRef = useRef<THREE.Mesh>(null);
-  const clothCascadeRef = useRef<THREE.Mesh>(null);
+  const capeMeshRef = useRef<THREE.Mesh>(null);
+  const bodiceMeshRef = useRef<THREE.Mesh>(null);
 
-  // Dynamic vertex animation for silky / buttery smooth cloth breathing
-  useFrame((state) => {
-    const time = state.clock.getElapsedTime() * (1 + windSpeed * 0.5);
+  // Generate procedural bump texture for active fabric
+  const fabricBumpTexture = useMemo(() => generateFabricBumpMap(fabricType), [fabricType]);
 
-    if (clothMeshRef.current && clothMeshRef.current.geometry) {
-      const position = clothMeshRef.current.geometry.attributes.position;
-      if (!clothMeshRef.current.userData.initialZ) {
-        const arr = new Float32Array(position.count);
-        for (let i = 0; i < position.count; i++) {
-          arr[i] = position.getZ(i);
-        }
-        clothMeshRef.current.userData.initialZ = arr;
-      }
-      const initialZ = clothMeshRef.current.userData.initialZ;
-      // Animate subtle ripples across the cloth surface
-      for (let i = 0; i < position.count; i++) {
-        const y = position.getY(i);
-        const x = position.getX(i);
-        // Soft buttery undulation
-        const wave = Math.sin(y * 4 + time * 2) * 0.018 * windSpeed + Math.cos(x * 5 + time * 1.5) * 0.012 * windSpeed;
-        position.setZ(i, initialZ[i] + wave);
-      }
-      position.needsUpdate = true;
+  // Distinct wave physics and frequency based on fabric GSM & type
+  const waveParams = useMemo(() => {
+    switch (fabricType) {
+      case "silk-charmeuse": // 19 Momme (~82 GSM): Fast, light fluttering waves
+        return { speed: 2.6, amp: 0.055, freqX: 5.5, freqY: 4.2, flutter: 0.025 };
+      case "heavy-satin": // 220 GSM: Deep, heavy, majestic parabolic billows
+        return { speed: 1.2, amp: 0.085, freqX: 2.8, freqY: 2.2, flutter: 0.012 };
+      case "cashmere-knit": // 240 GSM: Soft, rounded, pillowy breathing
+        return { speed: 1.4, amp: 0.035, freqX: 3.2, freqY: 2.5, flutter: 0.008 };
+      case "french-terry": // 290 GSM Cotton Looper: Stiff, structural drop with low flutter
+        return { speed: 0.9, amp: 0.022, freqX: 2.2, freqY: 1.8, flutter: 0.005 };
+      case "linen-voile": // 140 GSM: Agitated, airy crinkle fluttering
+        return { speed: 3.0, amp: 0.048, freqX: 7.0, freqY: 5.0, flutter: 0.032 };
+      default:
+        return { speed: 2.0, amp: 0.05, freqX: 4.0, freqY: 3.0, flutter: 0.015 };
     }
+  }, [fabricType]);
 
-    if (clothCascadeRef.current && clothCascadeRef.current.geometry) {
-      const position = clothCascadeRef.current.geometry.attributes.position;
-      if (!clothCascadeRef.current.userData.initialZ) {
-        const arr = new Float32Array(position.count);
-        for (let i = 0; i < position.count; i++) {
-          arr[i] = position.getZ(i);
-        }
-        clothCascadeRef.current.userData.initialZ = arr;
+  // Multi-harmonic vertex wave simulation for the billowing cape
+  useFrame((state) => {
+    const time = state.clock.getElapsedTime() * (1 + windSpeed * 0.4) * waveParams.speed;
+
+    if (capeMeshRef.current && capeMeshRef.current.geometry) {
+      const pos = capeMeshRef.current.geometry.attributes.position;
+      if (!capeMeshRef.current.userData.initialZ) {
+        const arr = new Float32Array(pos.count);
+        for (let i = 0; i < pos.count; i++) arr[i] = pos.getZ(i);
+        capeMeshRef.current.userData.initialZ = arr;
       }
-      const initialZ = clothCascadeRef.current.userData.initialZ;
-      for (let i = 0; i < position.count; i++) {
-        const y = position.getY(i);
-        const wave = Math.sin(y * 5 + time * 2.5) * 0.035 * windSpeed;
-        position.setZ(i, initialZ[i] + wave);
+      const initialZ = capeMeshRef.current.userData.initialZ;
+
+      for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i);
+        const y = pos.getY(i);
+        // Multi-harmonic aerodynamic wave
+        const primary = Math.sin(x * waveParams.freqX + time) * waveParams.amp;
+        const secondary = Math.cos(y * waveParams.freqY + time * 1.3) * (waveParams.amp * 0.6);
+        const flutter = Math.sin((x + y) * 9.0 + time * 2.5) * waveParams.flutter * windSpeed;
+        pos.setZ(i, initialZ[i] + (primary + secondary + flutter) * windSpeed);
       }
-      position.needsUpdate = true;
+      pos.needsUpdate = true;
     }
   });
 
-  // Physical fabric properties based on selection
-  const fabricMaterialProps = useMemo(() => {
+  // Physical PBR material specifications dynamically configured per fabric
+  const materialProps = useMemo(() => {
     switch (fabricType) {
-      case "silk-charmeuse":
+      case "silk-charmeuse": // Mirror gloss, intense sheen, liquid surface
         return {
-          roughness: 0.12,
+          roughness: 0.08,
           metalness: 0.04,
-          clearcoat: 0.95,
-          clearcoatRoughness: 0.08,
+          clearcoat: 1.0,
+          clearcoatRoughness: 0.05,
           sheen: 1.0,
-          sheenRoughness: 0.2,
-          sheenColor: new THREE.Color(color).offsetHSL(0, 0.1, 0.15),
+          sheenRoughness: 0.12,
+          sheenColor: new THREE.Color(color).offsetHSL(0, 0.15, 0.2),
+          bumpScale: 0.008,
         };
-      case "heavy-satin":
+      case "heavy-satin": // Dense pearlescent luster, sculptural reflections
         return {
-          roughness: 0.18,
+          roughness: 0.16,
           metalness: 0.08,
-          clearcoat: 0.85,
-          clearcoatRoughness: 0.12,
-          sheen: 0.9,
-          sheenRoughness: 0.3,
-          sheenColor: new THREE.Color(color).offsetHSL(0, 0.05, 0.1),
+          clearcoat: 0.9,
+          clearcoatRoughness: 0.1,
+          sheen: 0.95,
+          sheenRoughness: 0.25,
+          sheenColor: new THREE.Color(color).offsetHSL(0, 0.08, 0.12),
+          bumpScale: 0.02,
         };
-      case "cashmere-knit":
+      case "cashmere-knit": // Knitted rib texture, soft matte micro-fiber halo
         return {
-          roughness: 0.45,
-          metalness: 0.02,
-          clearcoat: 0.2,
-          clearcoatRoughness: 0.4,
-          sheen: 0.8,
-          sheenRoughness: 0.6,
-          sheenColor: new THREE.Color(color).offsetHSL(0, 0.05, 0.05),
+          roughness: 0.82,
+          metalness: 0.0,
+          clearcoat: 0.0,
+          clearcoatRoughness: 0.0,
+          sheen: 0.85,
+          sheenRoughness: 0.65,
+          sheenColor: new THREE.Color(color).offsetHSL(0, -0.05, 0.1),
+          bumpScale: 0.065,
         };
-      case "french-terry":
+      case "french-terry": // 290 GSM Cotton Looper: 100% matte, visible diagonal loop wale
+        return {
+          roughness: 0.95,
+          metalness: 0.0,
+          clearcoat: 0.0,
+          clearcoatRoughness: 0.0,
+          sheen: 0.1,
+          sheenRoughness: 0.9,
+          sheenColor: new THREE.Color(color),
+          bumpScale: 0.08,
+        };
+      case "linen-voile": // Crinkled slub linen: semi-sheer, organic paper-silk hand
         return {
           roughness: 0.65,
-          metalness: 0.0,
-          clearcoat: 0.05,
-          clearcoatRoughness: 0.8,
-          sheen: 0.3,
-          sheenRoughness: 0.8,
-          sheenColor: new THREE.Color(color),
-        };
-      case "linen-voile":
-        return {
-          roughness: 0.55,
-          metalness: 0.01,
-          clearcoat: 0.35,
-          clearcoatRoughness: 0.5,
-          sheen: 0.5,
-          sheenRoughness: 0.5,
-          sheenColor: new THREE.Color(color).offsetHSL(0, -0.05, 0.1),
+          metalness: 0.02,
+          clearcoat: 0.25,
+          clearcoatRoughness: 0.35,
+          sheen: 0.45,
+          sheenRoughness: 0.4,
+          sheenColor: new THREE.Color(color).offsetHSL(0, 0.05, 0.15),
+          bumpScale: 0.075,
+          transparent: true,
+          opacity: 0.94,
         };
       default:
         return {
-          roughness: 0.15,
+          roughness: 0.2,
           metalness: 0.05,
-          clearcoat: 0.9,
-          clearcoatRoughness: 0.1,
-          sheen: 1.0,
-          sheenRoughness: 0.25,
-          sheenColor: new THREE.Color(color),
+          clearcoat: 0.8,
+          sheen: 0.8,
+          bumpScale: 0.02,
         };
     }
   }, [fabricType, color]);
 
-  // Store initial Z positions for smooth wave animation
-  const onClothCreated = (mesh: THREE.Mesh | null) => {
-    if (mesh && mesh.geometry) {
-      const position = mesh.geometry.attributes.position;
-      const initialZ = new Float32Array(position.count);
-      for (let i = 0; i < position.count; i++) {
-        initialZ[i] = position.getZ(i);
-      }
-      mesh.userData.initialZ = initialZ;
-    }
-  };
-
   return (
-    <group position={[0, -0.6, 0]}>
-      {/* ================= ATELIER TAILORING DRESS FORM ================= */}
-      
-      {/* 1. Finial (Turned brass/wood top neck knob) */}
-      <mesh position={[0, 2.38, 0]} castShadow>
-        <sphereGeometry args={[0.13, 32, 32]} />
-        <meshStandardMaterial color="#c59b27" metalness={0.85} roughness={0.25} />
+    <group position={[0, -0.2, 0]}>
+      {/* ================= EDITORIAL MODEL SILHOUETTE ================= */}
+      {/* Head with sleek chignon bun matching the Pixabay reference model */}
+      <mesh position={[0, 2.05, 0]} castShadow>
+        <sphereGeometry args={[0.22, 32, 32]} />
+        <meshStandardMaterial color="#cbb39e" roughness={0.7} />
       </mesh>
-      <mesh position={[0, 2.22, 0]} castShadow>
-        <cylinderGeometry args={[0.16, 0.19, 0.16, 32]} />
-        <meshStandardMaterial color="#c59b27" metalness={0.85} roughness={0.25} />
+      {/* Sleek low hair bun */}
+      <mesh position={[0, 2.08, -0.21]} castShadow>
+        <sphereGeometry args={[0.11, 24, 24]} />
+        <meshStandardMaterial color="#1a1410" roughness={0.9} />
       </mesh>
-
-      {/* 2. Neck Cap & Neck */}
-      <mesh position={[0, 2.05, 0]}>
-        <cylinderGeometry args={[0.3, 0.33, 0.28, 32]} />
-        <meshStandardMaterial color="#3a2312" roughness={0.4} metalness={0.1} />
+      {/* Slender neck */}
+      <mesh position={[0, 1.78, 0]} castShadow>
+        <cylinderGeometry args={[0.1, 0.12, 0.38, 24]} />
+        <meshStandardMaterial color="#cbb39e" roughness={0.7} />
       </mesh>
-
-      {/* 3. Mannequin Torso Body (Sculpted haute couture silhouette in natural ecru linen) */}
-      {/* Upper Chest & Shoulders */}
-      <mesh position={[0, 1.62, 0]} castShadow receiveShadow>
-        <cylinderGeometry args={[0.78, 0.98, 0.65, 48, 16]} />
-        <meshStandardMaterial
-          color="#dcd6c8"
-          roughness={0.85}
-          bumpScale={0.02}
+      {/* Sculpted shoulders & clavicle */}
+      <mesh position={[0, 1.58, 0]} castShadow>
+        <cylinderGeometry args={[0.42, 0.38, 0.15, 32]} />
+        <meshStandardMaterial color="#cbb39e" roughness={0.7} />
+      </mesh>
+      {/* Graceful arms held lightly at sides in high-fashion pose */}
+      <mesh position={[-0.48, 1.15, 0.04]} rotation={[0, 0, 0.12]} castShadow>
+        <cylinderGeometry args={[0.075, 0.06, 0.95, 20]} />
+        <meshStandardMaterial color="#cbb39e" roughness={0.7} />
+      </mesh>
+      <mesh position={[0.48, 1.15, 0.04]} rotation={[0, 0, -0.12]} castShadow>
+        <cylinderGeometry args={[0.075, 0.06, 0.95, 20]} />
+        <meshStandardMaterial color="#cbb39e" roughness={0.7} />
+      </mesh>
+      {/* Slender lower torso & column gown base */}
+      <mesh position={[0, 0.25, 0]} castShadow receiveShadow>
+        <cylinderGeometry args={[0.34, 0.48, 1.3, 32]} />
+        <meshPhysicalMaterial
+          color={color}
+          bumpMap={fabricBumpTexture}
+          wireframe={wireframe}
+          side={THREE.DoubleSide}
+          {...materialProps}
         />
       </mesh>
 
-      {/* Bust & Ribcage */}
-      <mesh position={[0, 1.22, 0]} castShadow receiveShadow>
-        <cylinderGeometry args={[0.98, 0.82, 0.55, 48, 16]} />
-        <meshStandardMaterial
-          color="#dcd6c8"
-          roughness={0.85}
+      {/* ================= STRAPLESS DRAPED SILK BODICE ================= */}
+      <mesh ref={bodiceMeshRef} position={[0, 1.25, 0.02]} castShadow receiveShadow>
+        <cylinderGeometry args={[0.38, 0.33, 0.72, 48, 24]} />
+        <meshPhysicalMaterial
+          color={color}
+          bumpMap={fabricBumpTexture}
+          wireframe={wireframe}
+          side={THREE.DoubleSide}
+          {...materialProps}
         />
       </mesh>
 
-      {/* Waist (Tapered atelier contour) */}
-      <mesh position={[0, 0.88, 0]} castShadow receiveShadow>
-        <cylinderGeometry args={[0.82, 0.76, 0.35, 48, 16]} />
-        <meshStandardMaterial
-          color="#dcd6c8"
-          roughness={0.85}
+      {/* Pleated Couture Waist Sash */}
+      <mesh position={[0, 0.9, 0.02]} rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[0.35, 0.04, 16, 48]} />
+        <meshPhysicalMaterial
+          color={color}
+          bumpMap={fabricBumpTexture}
+          wireframe={wireframe}
+          {...materialProps}
         />
       </mesh>
 
-      {/* Flared Tailor Hips */}
-      <mesh position={[0, 0.45, 0]} castShadow receiveShadow>
-        <cylinderGeometry args={[0.76, 1.05, 0.65, 48, 16]} />
-        <meshStandardMaterial
-          color="#dcd6c8"
-          roughness={0.85}
+      {/* ================= BILLOWING SILK CAPE / WING ================= */}
+      {/* Expansive flowing fabric cape catching the wind behind her (Pixabay reference) */}
+      <mesh
+        ref={capeMeshRef}
+        position={[0.75, 1.25, -0.2]}
+        rotation={[0.1, -0.25, 0.05]}
+        castShadow
+        receiveShadow
+      >
+        <planeGeometry args={[2.4, 1.9, 64, 48]} />
+        <meshPhysicalMaterial
+          color={color}
+          bumpMap={fabricBumpTexture}
+          wireframe={wireframe}
+          side={THREE.DoubleSide}
+          {...materialProps}
         />
       </mesh>
-
-      {/* Base Cap of Dress Form */}
-      <mesh position={[0, 0.11, 0]}>
-        <cylinderGeometry args={[1.04, 0.95, 0.08, 48]} />
-        <meshStandardMaterial color="#3a2312" roughness={0.4} metalness={0.1} />
-      </mesh>
-
-      {/* Grosgrain Seam Ribbons (Center front, princess line, waist tape) */}
-      <mesh position={[0, 1.05, 0.96]}>
-        <boxGeometry args={[0.025, 1.9, 0.015]} />
-        <meshStandardMaterial color="#1a1a1a" roughness={0.9} />
-      </mesh>
-      <mesh position={[0, 0.85, 0]} rotation={[Math.PI / 2, 0, 0]}>
-        <torusGeometry args={[0.77, 0.012, 16, 48]} />
-        <meshStandardMaterial color="#1a1a1a" roughness={0.9} />
-      </mesh>
-
-      {/* 4. Stand & Pedestal (Turned brass adjustment pole & antique cast-iron tripod) */}
-      {/* Central Polished Steel / Brass Pole */}
-      <mesh position={[0, -0.65, 0]} castShadow>
-        <cylinderGeometry args={[0.055, 0.055, 1.6, 24]} />
-        <meshStandardMaterial color="#d4af37" metalness={0.85} roughness={0.2} />
-      </mesh>
-
-      {/* Tailor's Adjustment Wing Screw */}
-      <mesh position={[0.08, -0.35, 0]} rotation={[0, 0, Math.PI / 2]}>
-        <cylinderGeometry args={[0.03, 0.03, 0.16, 16]} />
-        <meshStandardMaterial color="#c59b27" metalness={0.9} roughness={0.2} />
-      </mesh>
-
-      {/* Heavy Tripod Scroll Base */}
-      <mesh position={[0, -1.45, 0]} castShadow>
-        <cylinderGeometry args={[0.16, 0.22, 0.12, 32]} />
-        <meshStandardMaterial color="#18181a" metalness={0.7} roughness={0.35} />
-      </mesh>
-
-      {/* Tripod 3 Legs */}
-      {[0, (2 * Math.PI) / 3, (4 * Math.PI) / 3].map((angle, i) => (
-        <group key={i} rotation={[0, angle, 0]}>
-          <mesh position={[0.45, -1.6, 0]} rotation={[0, 0, -0.32]} castShadow>
-            <boxGeometry args={[0.85, 0.06, 0.08]} />
-            <meshStandardMaterial color="#18181a" metalness={0.7} roughness={0.35} />
-          </mesh>
-          <mesh position={[0.82, -1.74, 0]}>
-            <sphereGeometry args={[0.07, 16, 16]} />
-            <meshStandardMaterial color="#c59b27" metalness={0.85} roughness={0.25} />
-          </mesh>
-        </group>
-      ))}
-
-      {/* ================= DRAPED SILKY / BUTTERY FABRIC ================= */}
-      <group ref={clothGroupRef}>
-        {/* Main Draped Bodice (Asymmetrical couture wrap with buttery sheen) */}
-        <mesh
-          ref={clothMeshRef}
-          position={[0, 1.15, 0.04]}
-          castShadow
-          receiveShadow
-        >
-          <cylinderGeometry args={[0.82, 0.88, 1.35, 64, 32, true]} />
-          <meshPhysicalMaterial
-            color={color}
-            wireframe={wireframe}
-            side={THREE.DoubleSide}
-            {...fabricMaterialProps}
-          />
-        </mesh>
-
-        {/* Asymmetrical Shoulder Drape Cowl (Gathered over right shoulder) */}
-        <mesh
-          position={[0.32, 1.82, 0.15]}
-          rotation={[0.3, -0.4, 0.6]}
-          castShadow
-        >
-          <torusGeometry args={[0.55, 0.14, 24, 48, Math.PI * 1.2]} />
-          <meshPhysicalMaterial
-            color={color}
-            wireframe={wireframe}
-            side={THREE.DoubleSide}
-            {...fabricMaterialProps}
-          />
-        </mesh>
-
-        {/* Diagonal Cross-Body Pleat Fold */}
-        <mesh
-          position={[-0.15, 1.35, 0.94]}
-          rotation={[0, 0, -0.42]}
-          castShadow
-        >
-          <cylinderGeometry args={[0.07, 0.12, 1.15, 24]} />
-          <meshPhysicalMaterial
-            color={color}
-            wireframe={wireframe}
-            {...fabricMaterialProps}
-          />
-        </mesh>
-
-        {/* Gathered Waist Sash & Ribbon Knot */}
-        <mesh position={[0, 0.78, 0]} rotation={[Math.PI / 2, 0, 0]}>
-          <torusGeometry args={[0.82, 0.08, 16, 48]} />
-          <meshPhysicalMaterial
-            color={color}
-            wireframe={wireframe}
-            {...fabricMaterialProps}
-          />
-        </mesh>
-        <mesh position={[0.78, 0.78, 0.35]} rotation={[0.4, 0.2, -0.3]}>
-          <sphereGeometry args={[0.14, 24, 24]} />
-          <meshPhysicalMaterial
-            color={color}
-            wireframe={wireframe}
-            {...fabricMaterialProps}
-          />
-        </mesh>
-
-        {/* Cascading Side Train (Flowing down past the hip like buttery liquid silk) */}
-        <mesh
-          ref={clothCascadeRef}
-          position={[0.82, 0.12, 0.25]}
-          rotation={[0.1, 0.1, -0.15]}
-          castShadow
-          receiveShadow
-        >
-          <planeGeometry args={[0.75, 1.5, 32, 48]} />
-          <meshPhysicalMaterial
-            color={color}
-            wireframe={wireframe}
-            side={THREE.DoubleSide}
-            {...fabricMaterialProps}
-          />
-        </mesh>
-      </group>
     </group>
   );
 };
 
+// ============================================================================
+// MAIN COMPONENT: REAL-MODEL & 3D FABRIC ATELIER STUDIO
+// ============================================================================
 interface ThreeGarmentViewerProps {
   theme?: "dark" | "light";
 }
 
 export const ThreeGarmentViewer: React.FC<ThreeGarmentViewerProps> = ({ theme = "dark" }) => {
+  const [viewMode, setViewMode] = useState<"video" | "3d">("video");
   const [wireframe, setWireframe] = useState<boolean>(false);
   const [autoRotate, setAutoRotate] = useState<boolean>(true);
   const [activeColorHex, setActiveColorHex] = useState<string>("#1B5E4A"); // Malachite Green
   const [activeFabric, setActiveFabric] = useState<string>("silk-charmeuse");
-  const [windSpeed, setWindSpeed] = useState<number>(1.2);
+  const [windSpeed, setWindSpeed] = useState<number>(1.5);
+  const [isPlaying, setIsPlaying] = useState<boolean>(true);
+  const [isCopied, setIsCopied] = useState<boolean>(false);
 
+  const videoRef = useRef<HTMLVideoElement>(null);
   const isLight = theme === "light";
 
+  // Style Union Signature Pantone Swatches
   const colorways = [
-    { name: "Malachite Green", code: "19-5421 TPX", hex: "#1B5E4A" },
-    { name: "Apricot Crush", code: "15-1247 TPX", hex: "#F4845F" },
-    { name: "Cannoli Cream", code: "11-4302 TPX", hex: "#E8E2D5" },
-    { name: "Astro Dust", code: "17-1537 TPX", hex: "#9E4748" },
-    { name: "Tidal Teal", code: "19-4324 TPX", hex: "#1B5B6E" },
-    { name: "Moonless Night", code: "19-4203 TPG", hex: "#181A1E" },
-    { name: "Adriatic Sea", code: "17-4440 TCX", hex: "#3A99D8" },
-    { name: "Sweet Mandarin", code: "16-1356 TPX", hex: "#E86F2D" },
+    { name: "Malachite Green", code: "19-5421 TPX", hex: "#1B5E4A", mood: "Haute Emerald" },
+    { name: "Apricot Crush", code: "15-1247 TPX", hex: "#F4845F", mood: "Warm Radiant" },
+    { name: "Cannoli Cream", code: "11-4302 TPX", hex: "#E8E2D5", mood: "Pristine Luxury" },
+    { name: "Astro Dust", code: "17-1537 TPX", hex: "#9E4748", mood: "Deep Crimson" },
+    { name: "Tidal Teal", code: "19-4324 TPX", hex: "#1B5B6E", mood: "Oceanic Twilight" },
+    { name: "Moonless Night", code: "19-4203 TPG", hex: "#181A1E", mood: "Midnight Noir" },
+    { name: "Adriatic Sea", code: "17-4440 TCX", hex: "#3A99D8", mood: "Cerulean Coast" },
+    { name: "Sweet Mandarin", code: "16-1356 TPX", hex: "#E86F2D", mood: "Zesty Sunset" },
   ];
 
+  // 5 Clear, Distinctive Fabric Types with Real GSM & Optical Attributes
   const fabrics = [
     {
       id: "silk-charmeuse",
       name: "Mulberry Silk Charmeuse",
-      weight: "19 Momme",
-      drape: "Liquid & Buttery",
-      desc: "Lustrous face, fluid drape, reflecting haute couture evening wear and resort elegance.",
+      weight: "19 Momme (~82 GSM)",
+      gsm: 82,
+      drapeFluidity: 98,
+      surfaceSheen: 96,
+      structure: "Ultra-fine filament silk with mirror-like liquid luster & rapid fluttering waves.",
+      handfeel: "Buttery, cool glide, featherweight evening drape.",
+      macroPattern: "liquid-mirror",
+      playbackRate: 1.1,
     },
     {
       id: "heavy-satin",
       name: "Heavy Liquid Satin",
       weight: "220 GSM",
-      drape: "Sculptural Sheen",
-      desc: "Dense pearl luster with rich undulating shadow cascades and smooth highlights.",
+      gsm: 220,
+      drapeFluidity: 84,
+      surfaceSheen: 92,
+      structure: "Dense 4/1 twill float weave casting deep sculptural valleys & pearlescent highlights.",
+      handfeel: "Substantial, liquid-heavy roll with majestic slow billows.",
+      macroPattern: "satin-twill",
+      playbackRate: 0.88,
     },
     {
       id: "cashmere-knit",
       name: "Cashmere-Silk Knit",
-      weight: "16 Gauge 2-Ply",
-      drape: "Ultra-Soft Micro-Sheen",
-      desc: "Supple, featherlight luxury knitwear drape with tactile micro-fiber halo.",
+      weight: "16 Gauge 2-Ply (~240 GSM)",
+      gsm: 240,
+      drapeFluidity: 68,
+      surfaceSheen: 32,
+      structure: "Micro-ribbed interlocking loops with soft matte halo and tactile knit wales.",
+      handfeel: "Ultra-soft, pillowy warmth, rounded gentle drape.",
+      macroPattern: "knitted-rib",
+      playbackRate: 0.95,
     },
     {
       id: "french-terry",
       name: "Cotton Looper (Uniset)",
       weight: "290 GSM",
-      drape: "Structured Streetwear",
-      desc: "Style Union signature 100% cotton looper with clean drop and diagonal reverse loop.",
+      gsm: 290,
+      drapeFluidity: 42,
+      surfaceSheen: 8,
+      structure: "Style Union signature 100% combed cotton looper with diagonal reverse coils and 100% matte face.",
+      handfeel: "Structured streetwear body, firm architectural creases, non-reflective.",
+      macroPattern: "looper-diagonal",
+      playbackRate: 0.9,
     },
     {
       id: "linen-voile",
       name: "Crinkled Silk Linen Voile",
       weight: "140 GSM",
-      drape: "Artisanal Airy",
-      desc: "Breathable textured weave capturing the 'Desert Nomad' and 'Bohemian Alchemist' themes.",
+      gsm: 140,
+      drapeFluidity: 76,
+      surfaceSheen: 45,
+      structure: "Semi-sheer open weave with organic slub fissures, crinkled crepe texture, and airy agitation.",
+      handfeel: "Dry, tactile paper-silk hand, breezy and breathable.",
+      macroPattern: "linen-slub",
+      playbackRate: 1.15,
     },
   ];
 
   const activeColorObj = colorways.find((c) => c.hex === activeColorHex) || colorways[0];
   const activeFabricObj = fabrics.find((f) => f.id === activeFabric) || fabrics[0];
+
+  // Adjust video playback rate according to fabric weight for realism
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.playbackRate = activeFabricObj.playbackRate * (0.8 + windSpeed * 0.15);
+    }
+  }, [activeFabricObj, windSpeed]);
+
+  const copyHex = () => {
+    navigator.clipboard.writeText(activeColorObj.hex);
+    setIsCopied(true);
+    setTimeout(() => setIsCopied(false), 2000);
+  };
 
   return (
     <section
@@ -412,331 +468,556 @@ export const ThreeGarmentViewer: React.FC<ThreeGarmentViewerProps> = ({ theme = 
           : "bg-[#0b0d10] border-white/10 text-white"
       }`}
     >
-      {/* Dynamic ambient color glow */}
+      {/* Ambient dynamic color glow matching selected Pantone shade */}
       <div
-        className="absolute top-1/4 -left-40 w-96 h-96 rounded-full blur-[150px] pointer-events-none opacity-25 transition-all duration-700"
+        className="absolute top-1/4 -left-40 w-96 h-96 rounded-full blur-[160px] pointer-events-none opacity-30 transition-all duration-700"
         style={{ backgroundColor: activeColorHex }}
       />
       <div
-        className="absolute bottom-1/4 -right-40 w-96 h-96 rounded-full blur-[150px] pointer-events-none opacity-25 transition-all duration-700"
+        className="absolute bottom-1/4 -right-40 w-96 h-96 rounded-full blur-[160px] pointer-events-none opacity-30 transition-all duration-700"
         style={{ backgroundColor: activeColorHex }}
       />
 
       <div className="max-w-7xl mx-auto relative z-10">
         {/* Section Header */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-6">
+        <div className="flex flex-col md:flex-row md:items-end justify-between mb-10 gap-6">
           <div>
             <div className="flex items-center gap-2 text-xs uppercase tracking-widest text-emerald-500 font-mono mb-2">
               <Sparkles size={14} />
-              <span>Realistic Haute Couture Dress Form &amp; Fabric Studio</span>
+              <span>Real-Model Draping Atelier &amp; 3D Textile Studio</span>
             </div>
-            <h2 className="text-3xl sm:text-5xl font-black font-anton uppercase tracking-tight">
-              3D Tailoring Dress Form Atelier
+            <h2 className="text-3xl sm:text-5xl font-black font-anton tracking-tight uppercase">
+              FLUID SILK ATELIER
             </h2>
-            <p className={`max-w-2xl text-sm sm:text-base mt-2 ${isLight ? "text-neutral-600" : "text-white/70"}`}>
-              Realistic tailoring mannequin with dynamic, buttery-smooth draped fabrics. Test liquid silk charmeuse, heavy satin, cashmere knits, and Style Union 290 GSM cotton loopers with real-time cloth physics.
+            <p className={`text-sm mt-2 max-w-xl leading-relaxed ${isLight ? "text-neutral-600" : "text-white/60"}`}>
+              Experience real high-fashion silk draping with dynamic aerodynamic motion. Switch between the 
+              <strong> Real Model Runway Film</strong> and <strong>Interactive 3D Orbit</strong>, testing distinctive fabrics and Style Union Pantone swatches.
             </p>
           </div>
 
-          {/* Quick Stats Glass Pill */}
-          <div
-            className={`flex items-center gap-4 border rounded-2xl p-3 backdrop-blur-xl fabric-twill relative overflow-hidden shadow-xl ${
-              isLight
-                ? "bg-white/80 border-black/10 text-neutral-900"
-                : "bg-white/[0.05] border-white/15 text-white"
-            }`}
-          >
-            <div>
-              <span className={`text-[10px] uppercase font-mono block ${isLight ? "text-neutral-500" : "text-white/50"}`}>
-                Current Fabric
-              </span>
-              <span className="text-sm font-semibold truncate block">{activeFabricObj.name}</span>
-            </div>
-            <div className={`h-8 w-px ${isLight ? "bg-black/10" : "bg-white/10"}`} />
-            <div>
-              <span className={`text-[10px] uppercase font-mono block ${isLight ? "text-neutral-500" : "text-white/50"}`}>
-                Weight / Spec
-              </span>
-              <span className="text-sm font-mono font-bold text-emerald-500">{activeFabricObj.weight}</span>
+          {/* Dual View Mode Switcher (Runway Film vs 3D Simulation) */}
+          <div className="flex items-center gap-3">
+            <div
+              className={`p-1.5 rounded-full border backdrop-blur-xl flex items-center gap-1 shadow-lg ${
+                isLight ? "bg-white/80 border-black/10" : "bg-black/60 border-white/15"
+              }`}
+            >
+              <button
+                onClick={() => setViewMode("video")}
+                className={`flex items-center gap-2 px-4 py-2 rounded-full text-xs font-mono font-bold uppercase transition-all duration-300 cursor-pointer ${
+                  viewMode === "video"
+                    ? "bg-white text-black shadow-md"
+                    : isLight
+                    ? "text-neutral-600 hover:text-black"
+                    : "text-white/60 hover:text-white"
+                }`}
+              >
+                <Film size={14} />
+                <span>Runway Film</span>
+              </button>
+              <button
+                onClick={() => setViewMode("3d")}
+                className={`flex items-center gap-2 px-4 py-2 rounded-full text-xs font-mono font-bold uppercase transition-all duration-300 cursor-pointer ${
+                  viewMode === "3d"
+                    ? "bg-emerald-500 text-black shadow-md shadow-emerald-500/25"
+                    : isLight
+                    ? "text-neutral-600 hover:text-black"
+                    : "text-white/60 hover:text-white"
+                }`}
+              >
+                <Box size={14} />
+                <span>3D Interactive</span>
+              </button>
             </div>
           </div>
         </div>
 
-        {/* 3D Canvas & Controls Layout */}
+        {/* Main Stage & Studio Controls Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
-          {/* Left Canvas (Takes 8 cols) */}
+          {/* Left Main Viewport (Takes 8 columns) */}
           <div
-            className={`lg:col-span-8 border rounded-3xl overflow-hidden relative min-h-[500px] sm:min-h-[620px] flex items-center justify-center shadow-2xl transition-all ${
+            className={`lg:col-span-8 border rounded-3xl overflow-hidden relative min-h-[520px] sm:min-h-[640px] flex items-center justify-center shadow-2xl transition-all ${
               isLight
                 ? "bg-[#e8ebf0] border-black/10 shadow-black/10"
-                : "bg-[#111319] border-white/15 shadow-black/60"
+                : "bg-[#101217] border-white/15 shadow-black/60"
             }`}
           >
-            <ErrorBoundary
-              sectionName="3D Dress Form Atelier"
-              fallback={
-                <div className="w-full h-full flex flex-col items-center justify-center p-8 text-center">
+            {viewMode === "video" ? (
+              /* ================= MODE 1: REAL MODEL RUNWAY FILM ================= */
+              <div className="w-full h-full relative flex items-center justify-center overflow-hidden bg-black select-none">
+                {/* Real Model High-Fashion Video Stream */}
+                <video
+                  ref={videoRef}
+                  src={modelVideoSrc}
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                  className="w-full h-full object-cover object-center transition-all duration-700 pointer-events-none"
+                />
+
+                {/* Graceful Dynamic Color Overlay for Selected Pantone Hue */}
+                <div
+                  className="absolute inset-0 pointer-events-none transition-all duration-700 ease-out"
+                  style={{
+                    backgroundColor: activeColorHex,
+                    mixBlendMode: "color",
+                    opacity: 0.85,
+                  }}
+                />
+
+                {/* Deep Shading Tone Adjustment (Preserving Highlights and Shadow Folds) */}
+                <div
+                  className="absolute inset-0 pointer-events-none transition-all duration-700 ease-out"
+                  style={{
+                    backgroundColor: activeColorHex,
+                    mixBlendMode: "multiply",
+                    opacity: 0.35,
+                  }}
+                />
+
+                {/* Tactile Surface Sheen & Texture Overlay per Fabric Type */}
+                {activeFabric === "cashmere-knit" && (
                   <div
-                    className="w-24 h-24 rounded-full border-4 shadow-xl mb-4 flex items-center justify-center transition-all duration-500"
-                    style={{ backgroundColor: activeColorHex, borderColor: isLight ? "#00000020" : "#ffffff30" }}
-                  >
-                    <Sparkles className="text-white drop-shadow-md" size={32} />
-                  </div>
-                  <h4 className="text-xl font-bold font-anton uppercase tracking-wide mb-1">
-                    {activeFabricObj.name}
-                  </h4>
-                  <p className="text-xs font-mono uppercase text-emerald-500 mb-3">
-                    {activeColorObj.name} • {activeColorObj.code} • {activeFabricObj.weight}
-                  </p>
-                  <p className={`text-xs max-w-sm leading-relaxed ${isLight ? "text-neutral-600" : "text-white/60"}`}>
-                    {activeFabricObj.desc}
-                  </p>
-                </div>
-              }
-            >
-              <Canvas
-                shadows
-                camera={{ position: [0, 0.4, 4.4], fov: 42 }}
-                dpr={[1, 2]}
-                className="w-full h-full cursor-grab active:cursor-grabbing"
-              >
-                {/* Studio Key & Rim Lighting */}
-                <ambientLight intensity={isLight ? 0.9 : 0.6} />
-                <directionalLight
-                  castShadow
-                  position={[4, 6, 5]}
-                  intensity={1.6}
-                  shadow-mapSize={2048}
-                />
-                <directionalLight position={[-4, 4, -3]} intensity={0.8} color="#9ec5fe" />
-                <pointLight position={[0, -1, 3]} intensity={0.4} />
-
-                <Float speed={1.1} rotationIntensity={0.15} floatIntensity={0.2}>
-                  <TailorDressForm
-                    color={activeColorHex}
-                    wireframe={wireframe}
-                    fabricType={activeFabric}
-                    windSpeed={windSpeed}
+                    className="absolute inset-0 pointer-events-none opacity-25 mix-blend-overlay"
+                    style={{
+                      backgroundImage: `repeating-linear-gradient(0deg, rgba(255,255,255,0.4) 0px, rgba(255,255,255,0.4) 1px, transparent 1px, transparent 4px), repeating-linear-gradient(90deg, rgba(0,0,0,0.3) 0px, rgba(0,0,0,0.3) 1px, transparent 1px, transparent 4px)`,
+                    }}
                   />
-                </Float>
+                )}
+                {activeFabric === "french-terry" && (
+                  <div
+                    className="absolute inset-0 pointer-events-none opacity-30 mix-blend-hard-light"
+                    style={{
+                      backgroundImage: `repeating-linear-gradient(45deg, rgba(0,0,0,0.25) 0px, rgba(0,0,0,0.25) 2px, transparent 2px, transparent 6px)`,
+                    }}
+                  />
+                )}
+                {activeFabric === "linen-voile" && (
+                  <div
+                    className="absolute inset-0 pointer-events-none opacity-20 mix-blend-overlay"
+                    style={{
+                      backgroundImage: `radial-gradient(rgba(255,255,255,0.5) 1px, transparent 1px)`,
+                      backgroundSize: `6px 6px`,
+                    }}
+                  />
+                )}
+                {activeFabric === "silk-charmeuse" && (
+                  <div
+                    className="absolute inset-0 pointer-events-none opacity-30 mix-blend-screen"
+                    style={{
+                      background: `linear-gradient(135deg, rgba(255,255,255,0.3) 0%, transparent 60%)`,
+                    }}
+                  />
+                )}
 
-                <ContactShadows
-                  position={[0, -2.3, 0]}
-                  opacity={0.65}
-                  scale={7}
-                  blur={2}
-                  far={5}
-                />
+                {/* Editorial Vignette & Glass Badges */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/30 pointer-events-none" />
 
-                <OrbitControls
-                  enableZoom={true}
-                  minDistance={2.4}
-                  maxDistance={7.0}
-                  maxPolarAngle={Math.PI / 1.7}
-                  minPolarAngle={Math.PI / 3.8}
-                  autoRotate={autoRotate}
-                  autoRotateSpeed={1.0}
-                />
-              </Canvas>
-            </ErrorBoundary>
-
-            {/* In-Canvas Floating Toolbar */}
-            <div className="absolute top-4 left-4 flex flex-wrap items-center gap-2 z-10">
-              <button
-                onClick={() => setWireframe((w) => !w)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-mono transition-all backdrop-blur-xl ${
-                  wireframe
-                    ? "bg-emerald-500 text-black font-semibold shadow-lg shadow-emerald-500/25"
-                    : isLight
-                    ? "bg-black/10 text-neutral-800 border border-black/10 hover:bg-black/20"
-                    : "bg-black/50 text-white/80 border border-white/20 hover:bg-black/80 hover:text-white"
-                }`}
-                title="Toggle Wireframe Mesh Topology"
-              >
-                <Layers size={13} />
-                <span>{wireframe ? "Solid Silk" : "CLO 3D Wireframe"}</span>
-              </button>
-
-              <button
-                onClick={() => setAutoRotate((r) => !r)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-mono transition-all backdrop-blur-xl ${
-                  autoRotate
-                    ? isLight
-                      ? "bg-black/80 text-white"
-                      : "bg-white/20 text-white border border-white/30"
-                    : isLight
-                    ? "bg-black/10 text-neutral-600 border border-black/10"
-                    : "bg-black/50 text-white/60 border border-white/20 hover:text-white"
-                }`}
-                title="Toggle Turntable Rotation"
-              >
-                <RotateCcw size={13} className={autoRotate ? "animate-spin" : ""} />
-                <span>{autoRotate ? "Turntable ON" : "Turntable Paused"}</span>
-              </button>
-
-              {/* Wind / Silk Flow Toggle */}
-              <button
-                onClick={() => setWindSpeed((s) => (s > 1.5 ? 0.4 : s + 0.8))}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-mono transition-all backdrop-blur-xl ${
-                  isLight
-                    ? "bg-black/10 text-neutral-800 border border-black/10 hover:bg-black/20"
-                    : "bg-black/50 text-white/80 border border-white/20 hover:bg-black/80"
-                }`}
-                title="Adjust Silk Drape Breeze Intensity"
-              >
-                <Wind size={13} className="text-cyan-400" />
-                <span>Flow: {windSpeed > 1.5 ? "Breeze" : "Gentle"}</span>
-              </button>
-            </div>
-
-            {/* Bottom-left hint */}
-            <div className="absolute bottom-4 left-4 z-10 pointer-events-none hidden sm:block">
-              <span
-                className={`text-[11px] font-mono px-3 py-1.5 rounded-xl backdrop-blur-md border ${
-                  isLight
-                    ? "bg-white/70 border-black/10 text-neutral-600"
-                    : "bg-black/50 border-white/10 text-white/50"
-                }`}
-              >
-                Drag to inspect dress form • Buttery silk physics simulation
-              </span>
-            </div>
-
-            {/* Bottom-right Active Swatch Badge */}
-            <div className="absolute bottom-4 right-4 z-10">
-              <div
-                className={`flex items-center gap-2 border px-3 py-1.5 rounded-2xl backdrop-blur-xl shadow-lg ${
-                  isLight
-                    ? "bg-white/90 border-black/10 text-neutral-900"
-                    : "bg-black/70 border-white/20 text-white"
-                }`}
-              >
-                <span
-                  className="w-4 h-4 rounded-md border border-white/40 shadow-inner"
-                  style={{ backgroundColor: activeColorHex }}
-                />
-                <div className="text-right">
-                  <div className="text-[11px] font-bold leading-tight">
-                    {activeColorObj.name}
+                {/* Floating On-Screen Badges */}
+                <div className="absolute top-4 left-4 flex flex-wrap items-center gap-2 z-10">
+                  <div className="px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-xl border border-white/20 text-white text-xs font-mono flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                    <span>EDITORIAL RUNWAY STREAM</span>
                   </div>
-                  <div className={`text-[9px] font-mono ${isLight ? "text-neutral-500" : "text-white/60"}`}>
-                    {activeColorObj.code}
+                  <div className="px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-xl border border-white/20 text-white text-xs font-mono">
+                    {activeFabricObj.weight}
                   </div>
+                </div>
+
+                {/* Floating Bottom Info Pill */}
+                <div className="absolute bottom-5 left-5 right-5 flex items-center justify-between z-10">
+                  <div className="flex items-center gap-3 bg-black/60 backdrop-blur-xl border border-white/20 px-4 py-2 rounded-2xl">
+                    <span
+                      className="w-4 h-4 rounded-full border border-white/40 shadow-sm"
+                      style={{ backgroundColor: activeColorHex }}
+                    />
+                    <div>
+                      <span className="text-xs font-bold text-white block uppercase tracking-wide">
+                        {activeColorObj.name}
+                      </span>
+                      <span className="text-[10px] font-mono text-emerald-400">
+                        {activeColorObj.code} • {activeColorObj.mood}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Playback Toggle */}
+                  <button
+                    onClick={() => {
+                      if (videoRef.current) {
+                        if (isPlaying) videoRef.current.pause();
+                        else videoRef.current.play();
+                        setIsPlaying(!isPlaying);
+                      }
+                    }}
+                    className="p-3 rounded-full bg-white/20 hover:bg-white/30 backdrop-blur-xl border border-white/30 text-white transition-all cursor-pointer"
+                    title={isPlaying ? "Pause Video" : "Play Video"}
+                  >
+                    {isPlaying ? <Pause size={16} /> : <Play size={16} />}
+                  </button>
                 </div>
               </div>
+            ) : (
+              /* ================= MODE 2: 3D INTERACTIVE ORBIT ================= */
+              <div className="w-full h-full relative">
+                <ErrorBoundary
+                  sectionName="3D Silk Flow Simulation"
+                  fallback={
+                    <div className="w-full h-full flex flex-col items-center justify-center p-8 text-center">
+                      <div
+                        className="w-24 h-24 rounded-full border-4 shadow-xl mb-4 flex items-center justify-center"
+                        style={{ backgroundColor: activeColorHex }}
+                      >
+                        <Sparkles className="text-white" size={32} />
+                      </div>
+                      <h4 className="text-xl font-bold font-anton uppercase tracking-wide mb-1">
+                        {activeFabricObj.name}
+                      </h4>
+                      <p className="text-xs font-mono text-emerald-500 mb-3">
+                        {activeColorObj.name} • {activeFabricObj.weight}
+                      </p>
+                    </div>
+                  }
+                >
+                  <Canvas
+                    shadows
+                    camera={{ position: [0, 1.2, 4.2], fov: 42 }}
+                    dpr={[1, 2]}
+                    className="w-full h-full cursor-grab active:cursor-grabbing"
+                  >
+                    <ambientLight intensity={isLight ? 0.9 : 0.6} />
+                    <directionalLight
+                      castShadow
+                      position={[4, 6, 5]}
+                      intensity={1.6}
+                      shadow-mapSize={2048}
+                    />
+                    <directionalLight position={[-4, 4, -3]} intensity={0.9} color="#9ec5fe" />
+                    <pointLight position={[0, -0.5, 2.5]} intensity={0.5} />
+
+                    <Float speed={1.1} rotationIntensity={0.1} floatIntensity={0.15}>
+                      <EditorialModelStudio
+                        color={activeColorHex}
+                        wireframe={wireframe}
+                        fabricType={activeFabric}
+                        windSpeed={windSpeed}
+                      />
+                    </Float>
+
+                    <ContactShadows
+                      position={[0, -1.8, 0]}
+                      opacity={0.65}
+                      scale={6}
+                      blur={2}
+                      far={4}
+                    />
+
+                    <OrbitControls
+                      enableZoom={true}
+                      minDistance={2.2}
+                      maxDistance={6.5}
+                      maxPolarAngle={Math.PI / 1.7}
+                      minPolarAngle={Math.PI / 3.8}
+                      autoRotate={autoRotate}
+                      autoRotateSpeed={1.0}
+                    />
+                  </Canvas>
+                </ErrorBoundary>
+
+                {/* 3D In-Canvas Floating Toolbar */}
+                <div className="absolute top-4 left-4 flex flex-wrap items-center gap-2 z-10">
+                  <button
+                    onClick={() => setWireframe((w) => !w)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-mono transition-all backdrop-blur-xl cursor-pointer ${
+                      wireframe
+                        ? "bg-emerald-500 text-black font-semibold shadow-lg shadow-emerald-500/25"
+                        : isLight
+                        ? "bg-black/10 text-neutral-800 border border-black/10 hover:bg-black/20"
+                        : "bg-black/50 text-white/80 border border-white/20 hover:bg-black/80 hover:text-white"
+                    }`}
+                    title="Toggle CLO 3D Wireframe Topology"
+                  >
+                    <Layers size={13} />
+                    <span>CLO 3D Wireframe</span>
+                  </button>
+
+                  <button
+                    onClick={() => setAutoRotate((r) => !r)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-mono transition-all backdrop-blur-xl cursor-pointer ${
+                      autoRotate
+                        ? isLight
+                          ? "bg-black/15 text-black border border-black/20"
+                          : "bg-white/20 text-white border border-white/30"
+                        : isLight
+                        ? "bg-black/5 text-neutral-500 border border-black/10"
+                        : "bg-black/40 text-white/50 border border-white/10"
+                    }`}
+                    title="Toggle Turntable 360 Rotation"
+                  >
+                    <Disc size={13} className={autoRotate ? "animate-spin" : ""} />
+                    <span>Turntable {autoRotate ? "ON" : "OFF"}</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Wind Velocity Controller (Applies to both Video and 3D) */}
+            <div className="absolute bottom-4 right-4 flex items-center gap-1.5 bg-black/60 backdrop-blur-xl border border-white/20 px-3 py-1.5 rounded-full z-10">
+              <Wind size={13} className="text-emerald-400" />
+              <span className="text-[11px] font-mono text-white/70 mr-1 uppercase">Wind:</span>
+              {[
+                { label: "Gentle", val: 1.0 },
+                { label: "Breeze", val: 1.8 },
+                { label: "Gale", val: 2.8 },
+              ].map((w) => (
+                <button
+                  key={w.label}
+                  onClick={() => setWindSpeed(w.val)}
+                  className={`px-2 py-0.5 rounded text-[10px] font-mono transition-all cursor-pointer ${
+                    windSpeed === w.val
+                      ? "bg-emerald-500 text-black font-bold"
+                      : "text-white/60 hover:text-white hover:bg-white/10"
+                  }`}
+                >
+                  {w.label}
+                </button>
+              ))}
             </div>
           </div>
 
-          {/* Right Control Panels (Takes 4 cols) */}
-          <div className="lg:col-span-4 flex flex-col justify-between gap-6">
-            {/* Fabric Selector Card (Glassmorphic with Fabric Background) */}
+          {/* Right Control Panel: Fabric Types & Tactile Specs (Takes 4 columns) */}
+          <div className="lg:col-span-4 flex flex-col justify-between space-y-6">
+            {/* Fabric Selection Card */}
             <div
-              className={`border rounded-3xl p-6 relative overflow-hidden backdrop-blur-xl shadow-xl fabric-twill ${
+              className={`p-6 rounded-3xl border backdrop-blur-xl transition-all ${
                 isLight
-                  ? "bg-white/70 border-black/10"
-                  : "bg-[#14161f]/80 border-white/15"
+                  ? "bg-white/80 border-black/10 shadow-lg shadow-black/5"
+                  : "bg-[#12141a]/90 border-white/10 shadow-2xl"
               }`}
             >
-              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider mb-4">
-                <Disc size={15} className="text-emerald-500" />
-                <span className="font-mono">Select Draped Fabric</span>
-              </div>
-
-              <div className="space-y-2.5">
-                {fabrics.map((fab) => (
-                  <button
-                    key={fab.id}
-                    onClick={() => setActiveFabric(fab.id)}
-                    className={`w-full text-left p-3.5 rounded-2xl border transition-all flex items-start justify-between ${
-                      activeFabric === fab.id
-                        ? "bg-emerald-500/15 border-emerald-500 shadow-md"
-                        : isLight
-                        ? "bg-white/60 border-black/5 hover:bg-white hover:border-black/15"
-                        : "bg-white/[0.02] border-white/5 hover:bg-white/[0.07] hover:border-white/20"
-                    }`}
-                  >
-                    <div>
-                      <div className="text-sm font-semibold flex items-center gap-2">
-                        {fab.name}
-                        {activeFabric === fab.id && (
-                          <Check size={14} className="text-emerald-500" />
-                        )}
-                      </div>
-                      <div className={`text-xs mt-0.5 line-clamp-1 ${isLight ? "text-neutral-600" : "text-white/60"}`}>
-                        {fab.desc}
-                      </div>
-                    </div>
-                    <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-500 border border-emerald-500/30 shrink-0 ml-2">
-                      {fab.weight}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Pantone Palette Card (Glassmorphic with Fabric Weave Background) */}
-            <div
-              className={`border rounded-3xl p-6 relative overflow-hidden backdrop-blur-xl shadow-xl fabric-herringbone ${
-                isLight
-                  ? "bg-white/70 border-black/10"
-                  : "bg-[#14161f]/80 border-white/15"
-              }`}
-            >
-              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider mb-4">
-                <Palette size={15} className="text-emerald-500" />
-                <span className="font-mono">Style Union Dye Lab Swatches</span>
-              </div>
-
-              <div className="grid grid-cols-4 gap-2">
-                {colorways.map((col) => (
-                  <button
-                    key={col.hex}
-                    onClick={() => setActiveColorHex(col.hex)}
-                    title={`${col.name} - ${col.code}`}
-                    className={`group relative flex flex-col p-2 rounded-xl border transition-all text-left ${
-                      activeColorHex === col.hex
-                        ? "border-emerald-500 ring-2 ring-emerald-500/40 bg-white/20 shadow-lg scale-105"
-                        : isLight
-                        ? "border-black/10 bg-white/50 hover:bg-white"
-                        : "border-white/10 bg-white/[0.03] hover:bg-white/[0.09]"
-                    }`}
-                  >
-                    <div
-                      className="w-full h-8 rounded-lg mb-1.5 shadow-inner border border-black/20"
-                      style={{ backgroundColor: col.hex }}
-                    />
-                    <span className="text-[9px] font-bold truncate block">
-                      {col.name.split(" ")[0]}
-                    </span>
-                    <span className={`text-[8px] font-mono truncate block ${isLight ? "text-neutral-500" : "text-white/50"}`}>
-                      {col.code.split(" ")[0]}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Tech Pack Navigation Banner */}
-            <div
-              className={`p-4 rounded-2xl border flex items-center justify-between backdrop-blur-xl fabric-mesh ${
-                isLight
-                  ? "bg-emerald-50 border-emerald-200 text-neutral-900"
-                  : "bg-gradient-to-r from-emerald-950/40 to-teal-950/30 border-emerald-500/20 text-white"
-              }`}
-            >
-              <div>
-                <span className="text-xs font-bold block">Need Detailed Pattern Specs?</span>
-                <span className={`text-[11px] ${isLight ? "text-neutral-600" : "text-white/70"}`}>
-                  Explore CAD tech packs &amp; trim placements
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <Palette size={16} className="text-emerald-500" />
+                  <h3 className="text-sm font-bold uppercase tracking-wider font-mono">
+                    Select Textile Type
+                  </h3>
+                </div>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-500 border border-emerald-500/30">
+                  {fabrics.length} Distinct Grades
                 </span>
               </div>
-              <a
-                href="#tech-packs"
-                className="px-3.5 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-bold font-mono tracking-tight transition-all shadow-md"
-              >
-                View CAD
-              </a>
+
+              {/* 5 Distinct Fabric Buttons with Clear Badges */}
+              <div className="space-y-2.5">
+                {fabrics.map((f) => {
+                  const isSelected = activeFabric === f.id;
+                  return (
+                    <button
+                      key={f.id}
+                      onClick={() => setActiveFabric(f.id)}
+                      className={`w-full text-left p-3.5 rounded-2xl border transition-all duration-300 cursor-pointer flex items-center justify-between ${
+                        isSelected
+                          ? "bg-emerald-500/10 border-emerald-500 text-white shadow-lg shadow-emerald-500/10"
+                          : isLight
+                          ? "bg-black/5 border-black/5 text-neutral-700 hover:bg-black/10 hover:border-black/20"
+                          : "bg-white/5 border-white/10 text-white/70 hover:bg-white/10 hover:text-white"
+                      }`}
+                    >
+                      <div className="flex-1 pr-2">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`text-xs font-bold font-mono uppercase ${
+                              isSelected ? "text-emerald-400" : isLight ? "text-neutral-900" : "text-white"
+                            }`}
+                          >
+                            {f.name}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3 mt-1">
+                          <span
+                            className={`text-[10px] font-mono px-2 py-0.5 rounded ${
+                              isSelected
+                                ? "bg-emerald-500 text-black font-bold"
+                                : isLight
+                                ? "bg-black/10 text-neutral-600"
+                                : "bg-white/10 text-white/60"
+                            }`}
+                          >
+                            {f.weight}
+                          </span>
+                          <span className={`text-[10px] truncate ${isLight ? "text-neutral-500" : "text-white/50"}`}>
+                            Fluidity: {f.drapeFluidity}% • Sheen: {f.surfaceSheen}%
+                          </span>
+                        </div>
+                      </div>
+                      {isSelected && <Check size={16} className="text-emerald-400 flex-shrink-0" />}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
+
+            {/* Macro Weave Magnifier & Technical Specifications */}
+            <div
+              className={`p-6 rounded-3xl border backdrop-blur-xl transition-all ${
+                isLight
+                  ? "bg-white/80 border-black/10 shadow-lg shadow-black/5"
+                  : "bg-[#12141a]/90 border-white/10 shadow-2xl"
+              }`}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <ZoomIn size={16} className="text-emerald-500" />
+                  <h4 className="text-xs font-bold uppercase tracking-wider font-mono">
+                    Macro Weave Magnifier (4x Zoom)
+                  </h4>
+                </div>
+                <span className="text-[10px] font-mono text-emerald-400 uppercase font-bold">
+                  {activeFabricObj.weight}
+                </span>
+              </div>
+
+              {/* Physical Macro Texture Representation */}
+              <div
+                className="w-full h-24 rounded-2xl border relative overflow-hidden flex items-center justify-center mb-4 transition-all duration-500"
+                style={{
+                  backgroundColor: activeColorHex,
+                  borderColor: isLight ? "rgba(0,0,0,0.15)" : "rgba(255,255,255,0.2)",
+                }}
+              >
+                {/* Pattern Graphic matching fabric type */}
+                {activeFabric === "silk-charmeuse" && (
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent animate-pulse" />
+                )}
+                {activeFabric === "heavy-satin" && (
+                  <div
+                    className="absolute inset-0 opacity-40"
+                    style={{
+                      backgroundImage: `repeating-linear-gradient(45deg, rgba(255,255,255,0.3) 0px, rgba(255,255,255,0.3) 4px, transparent 4px, transparent 12px)`,
+                    }}
+                  />
+                )}
+                {activeFabric === "cashmere-knit" && (
+                  <div
+                    className="absolute inset-0 opacity-50"
+                    style={{
+                      backgroundImage: `repeating-linear-gradient(90deg, rgba(0,0,0,0.4) 0px, rgba(0,0,0,0.4) 3px, rgba(255,255,255,0.3) 3px, rgba(255,255,255,0.3) 6px)`,
+                    }}
+                  />
+                )}
+                {activeFabric === "french-terry" && (
+                  <div
+                    className="absolute inset-0 opacity-60"
+                    style={{
+                      backgroundImage: `radial-gradient(circle, rgba(0,0,0,0.5) 2px, transparent 2px)`,
+                      backgroundSize: `10px 10px`,
+                    }}
+                  />
+                )}
+                {activeFabric === "linen-voile" && (
+                  <div
+                    className="absolute inset-0 opacity-40"
+                    style={{
+                      backgroundImage: `repeating-linear-gradient(0deg, rgba(0,0,0,0.4) 0px, rgba(0,0,0,0.4) 2px, transparent 2px, transparent 8px), repeating-linear-gradient(90deg, rgba(255,255,255,0.4) 0px, rgba(255,255,255,0.4) 2px, transparent 2px, transparent 8px)`,
+                    }}
+                  />
+                )}
+
+                <div className="relative z-10 px-4 py-2 rounded-xl bg-black/60 backdrop-blur-md border border-white/20 text-center">
+                  <span className="text-[11px] font-bold text-white uppercase tracking-wider block font-anton">
+                    {activeFabricObj.name}
+                  </span>
+                  <span className="text-[9px] font-mono text-emerald-400">
+                    Surface Sheen: {activeFabricObj.surfaceSheen}% • Drape Fluidity: {activeFabricObj.drapeFluidity}%
+                  </span>
+                </div>
+              </div>
+
+              {/* Technical Description & Handfeel */}
+              <p className={`text-xs leading-relaxed mb-3 ${isLight ? "text-neutral-700" : "text-white/70"}`}>
+                {activeFabricObj.structure}
+              </p>
+              <div
+                className={`p-2.5 rounded-xl text-[11px] font-mono border ${
+                  isLight ? "bg-black/5 border-black/5 text-neutral-600" : "bg-white/5 border-white/10 text-white/60"
+                }`}
+              >
+                <span className="font-bold text-emerald-500 uppercase block mb-0.5">Handfeel &amp; Form:</span>
+                {activeFabricObj.handfeel}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Style Union Master Pantone Swatches Palette */}
+        <div
+          className={`mt-10 p-6 sm:p-8 rounded-3xl border backdrop-blur-xl transition-all ${
+            isLight
+              ? "bg-white/80 border-black/10 shadow-lg shadow-black/5"
+              : "bg-[#12141a]/90 border-white/10 shadow-2xl"
+          }`}
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+            <div>
+              <span className="text-xs font-mono uppercase tracking-widest text-emerald-500 block mb-1">
+                Color Harmonization
+              </span>
+              <h3 className="text-xl sm:text-2xl font-black font-anton uppercase tracking-wide">
+                STYLE UNION SIGNATURE PANTONE PALETTE
+              </h3>
+            </div>
+            <button
+              onClick={copyHex}
+              className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-mono border transition-all cursor-pointer ${
+                isCopied
+                  ? "bg-emerald-500 text-black font-bold border-emerald-500"
+                  : isLight
+                  ? "bg-black/5 border-black/10 text-neutral-800 hover:bg-black/10"
+                  : "bg-white/10 border-white/20 text-white hover:bg-white/20"
+              }`}
+            >
+              {isCopied ? <Check size={14} /> : <Copy size={14} />}
+              <span>{isCopied ? "COPIED TO CLIPBOARD" : `COPY ${activeColorObj.hex}`}</span>
+            </button>
+          </div>
+
+          {/* 8 Clickable Pantone Swatch Chips */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+            {colorways.map((swatch) => {
+              const isSelected = activeColorHex === swatch.hex;
+              return (
+                <button
+                  key={swatch.name}
+                  onClick={() => setActiveColorHex(swatch.hex)}
+                  className={`group relative p-3 rounded-2xl border text-left transition-all duration-300 cursor-pointer ${
+                    isSelected
+                      ? "ring-2 ring-emerald-400 scale-105 shadow-xl border-transparent"
+                      : isLight
+                      ? "bg-black/5 border-black/5 hover:border-black/20 hover:scale-102"
+                      : "bg-white/5 border-white/10 hover:border-white/20 hover:scale-102"
+                  }`}
+                >
+                  <div
+                    className="w-full h-12 rounded-xl mb-2.5 shadow-inner transition-transform group-hover:scale-105"
+                    style={{ backgroundColor: swatch.hex }}
+                  />
+                  <div className="text-[11px] font-bold font-mono truncate block" title={swatch.name}>
+                    {swatch.name}
+                  </div>
+                  <div
+                    className={`text-[9px] font-mono mt-0.5 truncate ${
+                      isLight ? "text-neutral-500" : "text-white/50"
+                    }`}
+                  >
+                    {swatch.code}
+                  </div>
+                  <div className="text-[9px] font-mono text-emerald-500 font-bold mt-1">
+                    {swatch.hex}
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>
