@@ -1,4 +1,4 @@
-﻿import React from "react";
+import React from "react";
 import { DESIGNER_INFO } from "../data/portfolioData";
 import { ArrowUp, Mail, Phone, MapPin, Heart } from "lucide-react";
 
@@ -53,18 +53,8 @@ export const Footer: React.FC = () => {
                 </a>
               </li>
               <li>
-                <a href="#atelier" className="text-white/70 hover:text-white transition-colors">
-                  Interactive 3D Garment Atelier
-                </a>
-              </li>
-              <li>
                 <a href="#trends" className="text-white/70 hover:text-white transition-colors">
                   9 Style Union Trend Stories
-                </a>
-              </li>
-              <li>
-                <a href="#tech-packs" className="text-white/70 hover:text-white transition-colors">
-                  Production CAD &amp; Tech Packs
                 </a>
               </li>
               <li>

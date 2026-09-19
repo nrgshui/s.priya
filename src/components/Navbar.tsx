@@ -22,9 +22,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onContactClick, theme, onToggleT
 
   const navLinks = [
     { label: "TOONHUB", href: "#hero" },
-    { label: "3D Dress Form", href: "#atelier" },
     { label: "Trend Forecasts", href: "#trends" },
-    { label: "Tech Packs & CAD", href: "#tech-packs" },
     { label: "Color System", href: "#colors" },
     { label: "Experience & Skills", href: "#experience" },
   ];

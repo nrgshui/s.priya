@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Navbar } from "./components/Navbar";
 import { HeroSection } from "./components/HeroSection";
-import { ThreeGarmentViewer } from "./components/ThreeGarmentViewer";
 import { TrendShowcase } from "./components/TrendShowcase";
-import { TechPackArchive } from "./components/TechPackArchive";
 import { ColorPaletteExplorer } from "./components/ColorPaletteExplorer";
 import { ExperienceSkills } from "./components/ExperienceSkills";
 import { ContactModal } from "./components/ContactModal";
@@ -30,7 +28,7 @@ export function App() {
   };
 
   const handleDiscoverClick = () => {
-    document.getElementById("atelier")?.scrollIntoView({ behavior: "smooth" });
+    document.getElementById("trends")?.scrollIntoView({ behavior: "smooth" });
   };
 
   const isLight = theme === "light";
@@ -108,14 +106,8 @@ export function App() {
         </div>
       </section>
 
-      {/* Realistic 3D Dress Form Atelier with Buttery Smooth Silk Drape */}
-      <ThreeGarmentViewer theme={theme} />
-
       {/* 9 Trend Forecasts & Moodboards in Glassmorphic Cards with Fabric Textures */}
       <TrendShowcase theme={theme} />
-
-      {/* Production Tech Packs & CAD Archive with Blueprint Fabric Weaves */}
-      <TechPackArchive theme={theme} />
 
       {/* Style Union Master Pantone Library with Fabric Swatch Chips */}
       <ColorPaletteExplorer theme={theme} />

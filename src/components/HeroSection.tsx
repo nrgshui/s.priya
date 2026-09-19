@@ -482,13 +482,13 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
           onClick={onDiscoverClick}
         >
           <a
-            href="#atelier"
+            href="#trends"
             onClick={(e) => {
               e.preventDefault();
               if (onDiscoverClick) {
                 onDiscoverClick();
               } else {
-                document.getElementById("atelier")?.scrollIntoView({ behavior: "smooth" });
+                document.getElementById("trends")?.scrollIntoView({ behavior: "smooth" });
               }
             }}
             className="flex items-center transition-opacity duration-200 uppercase no-underline text-white drop-shadow-lg"

@@ -2,10 +2,10 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
 
-// Repository base for GitHub Pages hosting: /s.priya/
+// Relative base allows deployment to any path, subdomain, GitHub Pages, or local preview
 export default defineConfig({
   plugins: [react()],
-  base: "/s.priya/",
+  base: "./",
   resolve: {
     alias: {
       "@": path.resolve("src"),
